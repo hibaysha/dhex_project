@@ -1,7 +1,8 @@
+import 'dart:convert';
 import 'package:dhex_project/constants/apis.dart';
+import 'package:dhex_project/models/user_model.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import '../models/user_model.dart';
 
 class UserProvider with ChangeNotifier {
   String _firstName = '';
@@ -12,13 +13,19 @@ class UserProvider with ChangeNotifier {
 
   Future<void> loadUserFirstName() async {
     final url = Uri.parse(Apis.getUserData());
-    debugPrint(Apis.getUserData());
+    debugPrint('Loading user data from: ${Apis.getUserData()}');
 
     try {
       final response = await http.get(
         url,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
       );
+
+      debugPrint('GET Response Status: ${response.statusCode}');
+      debugPrint('GET Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final user = userModelFromJson(response.body);
@@ -29,10 +36,59 @@ class UserProvider with ChangeNotifier {
         debugPrint('Extracted Profile Image: $_profileImage');
         notifyListeners();
       } else {
-        throw Exception('Failed to fetch user data');
+        debugPrint('Failed to fetch user data: ${response.statusCode}');
+        debugPrint('Response: ${response.body}');
+        throw Exception('Failed to fetch user data: ${response.statusCode}');
       }
     } catch (e) {
       debugPrint("Error loading user data: $e");
+      rethrow;
+    }
+  }
+
+  Future<bool> updateFirstName(String newFirstName) async {
+    if (newFirstName.trim().isEmpty) {
+      debugPrint("First name cannot be empty");
+      return false;
+    }
+    debugPrint("newFirst name is $newFirstName");
+
+    final url = Uri.parse(Apis.updateUserData());
+
+    final requestBody = jsonEncode({
+      'firstName': newFirstName,
+      "id": "6778f7447fc6f415e56910d5",
+    });
+
+    debugPrint('Updating first name to: $newFirstName');
+    debugPrint('PUT URL: $url');
+
+    try {
+      final response = await http.put(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: requestBody,
+      );
+
+      debugPrint('PUT Response Status: ${response.statusCode}');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        _firstName = newFirstName;
+        notifyListeners();
+
+        debugPrint('First name updated successfully');
+        return true;
+      } else {
+        debugPrint('Failed to update first name');
+        debugPrint('Body: ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      debugPrint("🔥 Error updating first name: $e");
+      return false;
     }
   }
 

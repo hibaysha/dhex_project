@@ -6,6 +6,10 @@ class Apis {
     return '$baseUrl/mobile/profile?id=6778f7447fc6f415e56910d5';
   }
 
+  static String updateUserData() {
+    return '$baseUrl/mobile/profile';
+  }
+
   ///image Append url
   static const String imageAppend =
       "https://event-manager.syd1.cdn.digitaloceanspaces.com/";

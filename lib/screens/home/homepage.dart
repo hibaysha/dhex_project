@@ -1,8 +1,9 @@
+import 'dart:io';
 import 'package:dhex_project/constants/apis.dart';
 import 'package:dhex_project/provider/user_provider.dart';
 import 'package:flutter/material.dart';
-import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 class Homepage extends StatefulWidget {
@@ -15,21 +16,70 @@ class Homepage extends StatefulWidget {
 class _HomepageState extends State<Homepage> {
   File? _selectedImage;
   final ImagePicker _picker = ImagePicker();
+  bool _isUploading = false;
+  final TextEditingController _nameController = TextEditingController();
 
-  Future<void> _pickImage() async {
+  // Extract user ID from the existing API URL
+  String getUserIdFromApi() {
+    final url = Apis.getUserData();
+    final uri = Uri.parse(url);
+    return uri.queryParameters['id'] ?? '';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      userProvider.loadUserFirstName();
+      userProvider.loadUserProfileData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickImageFromSource(ImageSource source) async {
     try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        maxWidth: 1080,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
 
       if (image != null) {
+        final file = File(image.path);
+        final fileSize = await file.length();
+        if (fileSize > 5 * 1024 * 1024) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Image size must be less than 5MB'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return;
+        }
+
         setState(() {
-          _selectedImage = File(image.path);
+          _selectedImage = file;
         });
+
+        await uploadProfileImage();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -66,30 +116,181 @@ class _HomepageState extends State<Homepage> {
     );
   }
 
-  Future<void> _pickImageFromSource(ImageSource source) async {
-    try {
-      final XFile? image = await _picker.pickImage(source: source);
+  void _showEditNameDialog() {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    _nameController.text = userProvider.firstName;
 
-      if (image != null) {
-        setState(() {
-          _selectedImage = File(image.path);
-        });
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Edit Name'),
+          content: TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(
+              labelText: 'First Name',
+              border: OutlineInputBorder(),
+            ),
+            textCapitalization: TextCapitalization.words,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final newName = _nameController.text.trim();
+                if (newName.isNotEmpty) {
+                  Navigator.pop(context);
+                  await _updateFirstName(newName);
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _updateFirstName(String newName) async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+    try {
+      final success = await userProvider.updateFirstName(newName);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              success ? 'Name updated successfully!' : 'Failed to update name',
+            ),
+            backgroundColor: success ? Colors.green : Colors.redAccent,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating name: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
 
-  // Method to get complete image URL
-  String getProfileImageUrl(String? profileImage) {
-    if (profileImage == null || profileImage.isEmpty) {
-      return '';
+  Future<void> uploadProfileImage() async {
+    if (_selectedImage == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please select an image first.")),
+        );
+      }
+      return;
     }
-    // append
+
+    final userId = getUserIdFromApi();
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+    if (userId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("User ID not found in API configuration."),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isUploading = true;
+    });
+
+    final uri = Uri.parse(Apis.updateUserData());
+
+    try {
+      // Create multipart request
+      var request = http.MultipartRequest('PUT', uri);
+
+      // Add the image file
+      request.files.add(
+        await http.MultipartFile.fromPath('keyImage', _selectedImage!.path),
+      );
+
+      // IMPORTANT: Add the firstName field to preserve it during image upload
+      if (userProvider.firstName.isNotEmpty) {
+        //requestbodyil add cheyyua
+        request.fields['firstName'] = userProvider.firstName;
+        request.fields['id'] = "6778f7447fc6f415e56910d5";
+      }
+
+      debugPrint('📤 Uploading image to: $uri');
+      debugPrint('📤 Request fields: ${request.fields}');
+      debugPrint('📤 Request files: ${request.files.map((f) => f.field)}');
+
+      var response = await request.send();
+
+      // Handle response
+      final responseBody = await response.stream.bytesToString();
+      debugPrint('📥 Response status: ${response.statusCode}');
+      debugPrint('📥 Response body: $responseBody');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        debugPrint('✅ Profile image uploaded successfully');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Profile image updated successfully!"),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          // Reload user data to get updated profile image URL
+          await userProvider.loadUserProfileData();
+        }
+      } else {
+        debugPrint('Upload failed with status: ${response.statusCode}');
+        debugPrint('Response body: $responseBody');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                "Upload failed: ${response.reasonPhrase ?? 'Unknown error'}",
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Upload error: $e");
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Network error: ${e.toString()}"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+        });
+      }
+    }
+  }
+
+  String getProfileImageUrl(String? profileImage) {
+    if (profileImage == null || profileImage.isEmpty) return '';
     return '${Apis.imageAppend}$profileImage';
   }
 
@@ -101,16 +302,6 @@ class _HomepageState extends State<Homepage> {
     } else {
       return const AssetImage('assets/profile.jpg');
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<UserProvider>(context, listen: false).loadUserFirstName();
-      // Load user profile data including profile image
-      Provider.of<UserProvider>(context, listen: false).loadUserProfileData();
-    });
   }
 
   @override
@@ -130,24 +321,40 @@ class _HomepageState extends State<Homepage> {
               child: Consumer<UserProvider>(
                 builder: (context, userProvider, child) {
                   return GestureDetector(
-                    onTap: _showImageSourceDialog,
-                    child: Container(
-                      height: 70,
-                      width: 70,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        image: DecorationImage(
-                          image: getImageInfo(userProvider.profileImage),
-                          fit: BoxFit.cover,
-                          onError: (exception, stackTrace) {
-                            // Handle network image error by falling back to asset image
-                            setState(() {
-                              // This will trigger a rebuild with the fallback image
-                            });
-                          },
+                    onTap: _isUploading ? null : _showImageSourceDialog,
+                    child: Stack(
+                      children: [
+                        Container(
+                          height: 70,
+                          width: 70,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            image: DecorationImage(
+                              image: getImageInfo(userProvider.profileImage),
+                              fit: BoxFit.cover,
+                              onError: (_, __) => setState(() {}),
+                            ),
+                            color: const Color.fromARGB(255, 255, 249, 231),
+                          ),
                         ),
-                        color: Colors.brown,
-                      ),
+                        if (_isUploading)
+                          Container(
+                            height: 70,
+                            width: 70,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.black.withOpacity(0.5),
+                            ),
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   );
                 },
@@ -160,9 +367,33 @@ class _HomepageState extends State<Homepage> {
                   userProvider.firstName.isNotEmpty
                       ? userProvider.firstName
                       : 'No name set';
-              return Text(name, style: const TextStyle(fontSize: 17));
+              return GestureDetector(
+                onTap: _showEditNameDialog,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.edit, size: 16, color: Colors.grey),
+                  ],
+                ),
+              );
             },
           ),
+          if (_isUploading)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'Uploading...',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
         ],
       ),
     );
