@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "110589546991",
+    "project_id": "dhex-d9bc6",
+    "storage_bucket": "dhex-d9bc6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:110589546991:android:20ce2c880b91837acba61a",
+        "android_client_info": {
+          "package_name": "com.example.dhex_project"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA-6tlzyuQrMbISTVm445ST9xo9Ovw478k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
