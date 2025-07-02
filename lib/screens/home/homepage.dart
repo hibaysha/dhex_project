@@ -1,10 +1,14 @@
 import 'dart:io';
 import 'package:dhex_project/constants/apis.dart';
 import 'package:dhex_project/provider/user_provider.dart';
+import 'package:dhex_project/screens/signin/signin.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -14,8 +18,8 @@ class Homepage extends StatefulWidget {
 }
 
 class _HomepageState extends State<Homepage> {
-  File? _selectedImage;
-  final ImagePicker _picker = ImagePicker();
+  File? _selectedImage; // Stores picked image file
+  final ImagePicker _picker = ImagePicker(); // For camera/gallery access
   bool _isUploading = false;
   final TextEditingController _nameController = TextEditingController();
 
@@ -45,16 +49,17 @@ class _HomepageState extends State<Homepage> {
   Future<void> _pickImageFromSource(ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(
-        source: source,
+        source: source, // Camera or Gallery
         maxWidth: 1080,
         maxHeight: 1080,
-        imageQuality: 85,
+        imageQuality: 85, // Compression (85%)
       );
 
       if (image != null) {
         final file = File(image.path);
         final fileSize = await file.length();
         if (fileSize > 5 * 1024 * 1024) {
+          // File size check (max 5MB)
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -67,10 +72,10 @@ class _HomepageState extends State<Homepage> {
         }
 
         setState(() {
-          _selectedImage = file;
+          _selectedImage = file; // Store selected image
         });
 
-        await uploadProfileImage();
+        await uploadProfileImage(); // Auto-uploads immediately after selection
       }
     } catch (e) {
       if (mounted) {
@@ -85,6 +90,7 @@ class _HomepageState extends State<Homepage> {
   }
 
   void _showImageSourceDialog() {
+    //Shows popup with Camera/Gallery options, User taps their preference & Calls image picker with selected source
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -223,25 +229,26 @@ class _HomepageState extends State<Homepage> {
       );
 
       // IMPORTANT: Add the firstName field to preserve it during image upload
+      // Preserve existing name during image upload
       if (userProvider.firstName.isNotEmpty) {
         //requestbodyil add cheyyua
         request.fields['firstName'] = userProvider.firstName;
         request.fields['id'] = "6778f7447fc6f415e56910d5";
       }
 
-      debugPrint('📤 Uploading image to: $uri');
-      debugPrint('📤 Request fields: ${request.fields}');
-      debugPrint('📤 Request files: ${request.files.map((f) => f.field)}');
+      debugPrint('Uploading image to: $uri');
+      debugPrint('Request fields: ${request.fields}');
+      debugPrint('Request files: ${request.files.map((f) => f.field)}');
 
       var response = await request.send();
 
       // Handle response
       final responseBody = await response.stream.bytesToString();
-      debugPrint('📥 Response status: ${response.statusCode}');
-      debugPrint('📥 Response body: $responseBody');
+      debugPrint('Response status: ${response.statusCode}');
+      debugPrint('Response body: $responseBody');
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        debugPrint('✅ Profile image uploaded successfully');
+        debugPrint('Profile image uploaded successfully');
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -312,6 +319,30 @@ class _HomepageState extends State<Homepage> {
         backgroundColor: const Color.fromARGB(255, 255, 251, 219),
         elevation: 4,
         centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: () async {
+              //Sign out from Google & Firebase
+              await GoogleSignIn().signOut();
+              await FirebaseAuth.instance.signOut();
+
+              //Clear saved login data from SharedPreferences
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('email');
+              await prefs.remove('name');
+              await prefs.remove('image');
+
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => Signin()),
+                  (route) => false, // remove all previous routes
+                );
+              }
+            },
+            icon: const Icon(Icons.logout),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -320,6 +351,7 @@ class _HomepageState extends State<Homepage> {
               padding: const EdgeInsets.only(top: 16, bottom: 6),
               child: Consumer<UserProvider>(
                 builder: (context, userProvider, child) {
+                  // Editable Name
                   return GestureDetector(
                     onTap: _isUploading ? null : _showImageSourceDialog,
                     child: Stack(
