@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:dhex_project/constants/apis.dart';
 import 'package:dhex_project/provider/user_provider.dart';
+import 'package:dhex_project/screens/home/first_page.dart';
+import 'package:dhex_project/screens/home/second_page.dart';
 import 'package:dhex_project/screens/signin/signin.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -426,6 +428,16 @@ class _HomepageState extends State<Homepage> {
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ),
+          SizedBox(height: 300),
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => FirstPage()),
+              );
+            },
+            child: Text('Go to First Page'),
+          ),
         ],
       ),
     );

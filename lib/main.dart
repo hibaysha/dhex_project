@@ -1,6 +1,6 @@
 import 'package:dhex_project/firebase_options.dart';
 import 'package:dhex_project/provider/user_provider.dart';
-import 'package:dhex_project/screens/signin/signin.dart';
+import 'package:dhex_project/screens/splash/splash.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -26,7 +26,7 @@ class MyApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
           useMaterial3: true,
         ),
-        home: const Signin(),
+        home: SplashScreen(),
       ),
     );
   }
